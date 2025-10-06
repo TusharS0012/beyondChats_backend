@@ -1,8 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
-import yt_dlp  # type: ignore
-
+from youtube_search import YoutubeSearch # type: ignore
 
 router = APIRouter()
 
@@ -12,25 +11,16 @@ class VideoRequest(BaseModel):
 
 @router.post("/recommend")
 def recommend_videos(data: VideoRequest):
-    search_url = f"ytsearch{data.max_results}:{data.query}"
-
-    ydl_opts = {
-        'quiet': True,
-        'skip_download': True,
-        'extract_flat': True,
-        'force_generic_extractor': True
-    }
-
+    results = YoutubeSearch(data.query, max_results=data.max_results).to_dict()
+    
     videos: List[Dict] = []
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl: # type: ignore
-        info = ydl.extract_info(search_url, download=False)
-        for entry in info.get("entries", []):
-            videos.append({
-                "title": entry.get("title"),
-                "url": entry.get("url"),
-                "duration": entry.get("duration"),
-                "channel": entry.get("uploader"),
-                "views": entry.get("view_count")
-            })
-
+    for video in results:
+        videos.append({
+            "title": video.get("title"),
+            "url": f"https://www.youtube.com{video.get('url_suffix')}",
+            "duration": video.get("duration"),
+            "channel": video.get("channel"),
+            "views": video.get("views")
+        })
+    
     return {"videos": videos}

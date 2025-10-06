@@ -1,10 +1,10 @@
 fastapi[all]
 uvicorn[standard]
 python-multipart
+PyMuPDF
+supabase
+youtube-search-python
+python-dotenv
 torch
 transformers
 sentence-transformers
-PyMuPDF
-supabase
-youtube_search
-python-dotenv
