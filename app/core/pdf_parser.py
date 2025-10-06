@@ -1,4 +1,5 @@
-import fitz  
+import fitz  # type: ignore
+
 from typing import List, Dict
 
 def extract_text_from_pdf(file_path: str) -> str:

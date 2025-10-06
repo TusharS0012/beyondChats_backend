@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict
-import yt_dlp
+import yt_dlp  # type: ignore
+
 
 router = APIRouter()
 
