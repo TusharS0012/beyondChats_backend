@@ -1,0 +1,10 @@
+fastapi[all]
+uvicorn[standard]
+python-multipart
+torch
+transformers
+sentence-transformers
+PyMuPDF
+supabase
+youtube_search
+python-dotenv

@@ -1,0 +1,63 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+.env.*
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# Logs and databases
+*.log
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+*.DS_Store
+*.egg
+*.egg-info/
+.eggs/
+*.pytest_cache/
+.pytest_cache/
+
+# FastAPI / Uvicorn
+*.pid
+*.sock
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# OS-specific
+Thumbs.db
+Desktop.ini
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Pytest cache
+.pytest_cache/
+
+# Docker
+*.env
+*.dockerignore
+Dockerfile
+docker-compose.override.yml
