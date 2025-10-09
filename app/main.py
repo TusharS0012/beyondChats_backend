@@ -10,6 +10,10 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import InferenceClient
+import re
+import yt_dlp
+from uuid import UUID
+from uuid import uuid4
 
 # Load environment variables
 load_dotenv()
@@ -19,12 +23,20 @@ LLM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"  # Model to use
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:3000",  # React frontend
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,  # explicitly allow your frontend
+    allow_credentials=True,  # required for FormData / cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ---------------- Database ----------------
 url = "https://gsgiwpwyvfascngdjlfm.supabase.co"
@@ -190,26 +202,53 @@ def cosine_similarity(a: List[float], b: List[float]) -> float:
     b_arr = np.array(b)
     return float(np.dot(a_arr, b_arr) / (np.linalg.norm(a_arr) * np.linalg.norm(b_arr)))
 
+def search_youtube(query, max_results=3):
+    ydl_opts = {
+        'quiet': True,
+        'skip_download': True,
+        'extract_flat': 'in_playlist',
+        'default_search': 'ytsearch3',  # 'ytsearchN' fetches N results
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
+            results = ydl.extract_info(query, download=False)
+            videos = []
+            for entry in results.get('entries', [])[:max_results]:
+                videos.append({
+                    "title": entry.get('title'),
+                    "url": entry.get('url'),
+                    "channel": entry.get('uploader'),
+                    "description": entry.get('description') or ""
+                })
+            return videos
+    except Exception as e:
+        print("⚠️ YouTube search failed:", e)
+        return []
+
 # ---------------- Endpoints ----------------         
+
+# Assuming you already have supabase client initialized:
+# from supabase import create_client, Client
+# supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+class Request(BaseModel):
+    question: str
 @app.post("/chat")
 async def chat(request: ChatRequest):
     try:
-        # Fetch all document chunks using Supabase
+        # ---------------- Fetch document chunks ----------------
         result = supabase.table("document_chunks").select("text_chunk, embedding, page_number").execute()
-        
         if not hasattr(result, 'data') or not result.data or len(result.data) == 0:  # type: ignore
             raise HTTPException(status_code=404, detail="No document chunks found. Please upload a PDF first.")
 
         print(f"🔍 Searching through {len(result.data)} chunks...")  # type: ignore
         question_emb = get_embedding(request.question)
         scored = []
-        
+
         for row in result.data:  # type: ignore
             text_chunk = row.get("text_chunk")  # type: ignore
             emb = row.get("embedding")  # type: ignore
             page = row.get("page_number")  # type: ignore
             
-            # Convert embedding from database format to list if needed
             if isinstance(emb, str):
                 emb = json.loads(emb)
             elif not isinstance(emb, list):
@@ -218,43 +257,37 @@ async def chat(request: ChatRequest):
             score = cosine_similarity(question_emb, emb)  # type: ignore
             scored.append({"text": text_chunk, "page": page, "score": score})
 
-        # Get top 3 most similar chunks
+        # Get top 3 chunks
         top_chunks = sorted(scored, key=lambda x: x["score"], reverse=True)[:3]
-        
-        # Log the top scores for debugging
         print(f"🎯 Top 3 scores: {[round(c['score'], 3) for c in top_chunks]}")
         
         if not top_chunks or all(c["score"] < 0.1 for c in top_chunks):
-            return {
-                "answer": "I apologize, but I can only answer questions related to the content of the uploaded document. Your question appears to be outside the scope of this document.",
-                "context": []
-            }
-        
-        context = "\n\n".join([f"[Page {c['page']}]\n{c['text']}" for c in top_chunks])
-        
-        # Pass the top score to the answer generator
-        top_score = top_chunks[0]["score"]
-        print(f"📊 Generating answer with top similarity score: {round(top_score, 3)}")
-        answer = generate_hf_answer(context, request.question, top_score)
-        
+            answer = "I apologize, but I can only answer questions related to the content of the uploaded document. Your question appears to be outside the scope of this document."
+        else:
+            context = "\n\n".join([f"[Page {c['page']}]\n{c['text']}" for c in top_chunks])
+            top_score = top_chunks[0]["score"]
+            print(f"📊 Generating answer with top similarity score: {round(top_score, 3)}")
+            answer = generate_hf_answer(context, request.question, top_score)
+
+        # ---------------- YouTube video recommendations ----------------
+        related_videos = []
+        if any(word in request.question.lower() for word in ["video", "videos", "show me", "watch", "recommend"]):
+            try:
+                related_videos = search_youtube(request.question, max_results=3)
+            except Exception as e:
+                print("⚠️ Video search failed:", e)
+
+        # ---------------- Return full response ----------------
         return {
-            "answer": answer, 
-            "context": [{"text": c["text"], "page": c["page"], "score": float(c["score"])} for c in top_chunks]
+            "answer": answer,
+            "context": [{"text": c["text"], "page": c["page"], "score": float(c["score"])} for c in top_chunks],
+            "videos": related_videos
         }
-    
+
     except Exception as e:
         print(f"❌ Error processing question: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing question: {str(e)}")
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from pydantic import BaseModel
-from uuid import UUID, uuid4
-import os
 
-app = FastAPI()
-
-# Assuming you already have supabase client initialized:
-# from supabase import create_client, Client
-# supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ---------------- PDF Upload ----------------
 @app.post("/upload")
@@ -330,52 +363,47 @@ class QuizRequest(BaseModel):
 @app.post("/generate_quiz")
 def generate_quiz(request: QuizRequest):
     """
-    Example: Fetch the latest document for this user and generate quiz
+    Fetch latest document for this user and generate quiz from its chunks.
     """
-    # Validate UUID
     try:
         user_uuid = UUID(request.user_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid user_id. Must be a valid UUID.")
+        raise HTTPException(status_code=400, detail="Invalid user_id")
 
-    # Fetch latest document for this user
-    try:
-        doc_response = supabase.table("documents") \
-            .select("id") \
-            .eq("user_id", str(user_uuid)) \
-            .order("created_at", desc=True) \
-            .limit(1) \
-            .execute()
-        
-        if not doc_response.data or len(doc_response.data) == 0: # type: ignore
-            raise HTTPException(status_code=404, detail="No documents found for this user.")
+    # Fetch latest document
+    doc_response = supabase.table("documents") \
+        .select("id") \
+        .eq("user_id", str(user_uuid)) \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+    
+    if not doc_response.data or len(doc_response.data) == 0: # type: ignore
+        raise HTTPException(status_code=404, detail="No documents found for this user.")
 
-        document_id = doc_response.data[0].get("id") # type: ignore
-        print(f"✅ Latest document for user {user_uuid}: {document_id}")
+    document_id = doc_response.data[0]["id"] # type: ignore
 
-        # Fetch chunks for this document
-        chunks_response = supabase.table("document_chunks") \
-            .select("*") \
-            .eq("document_id", document_id) \
-            .execute()
-        
-        chunks = chunks_response.data # type: ignore
-        print(f"📄 Found {len(chunks)} chunks for document {document_id}")
+    # Fetch chunks for this document
+    chunks_response = supabase.table("document_chunks") \
+        .select("*") \
+        .eq("document_id", document_id) \
+        .execute()
+    
+    chunks = chunks_response.data # type: ignore
+    if not chunks:
+        raise HTTPException(status_code=404, detail="No document chunks found.")
 
-        # Example: generate a simple quiz from chunks
-        quiz = []
-        for idx, chunk in enumerate(chunks[:5]):  # limit to first 5 chunks
-            quiz.append({
-                "question": f"Question from chunk {idx+1}",
-                "answer": chunk["text_chunk"][:100] + "..."  # type: ignore
-            })
+    quiz = []
+    for chunk in chunks[:5]:  # limit to first 5 chunks
+        # Use first 10-15 words from chunk as the "question prompt" or generate dynamically
+        question_text = chunk["text_chunk"][:100].strip().replace("\n", " ") # type: ignore
+        quiz.append({
+            "id": str(uuid4()),  
+            "question": f"Based on this passage: {question_text} ... What is it about?",
+            "answer": question_text
+        })
 
-        return {"documentId": str(document_id), "quiz": quiz}
-
-    except Exception as e:
-        print(f"❌ Error generating quiz: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error generating quiz: {str(e)}")
-
+    return {"documentId": str(document_id), "quiz": quiz}
 class QuizAttemptRequest(BaseModel):
     user_id: str
     quiz_ids: List[str]
