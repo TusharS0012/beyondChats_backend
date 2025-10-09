@@ -9,7 +9,6 @@ import json
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from huggingface_hub import InferenceClient
-import re
 import yt_dlp
 from uuid import UUID
 from uuid import uuid4
@@ -66,7 +65,7 @@ def extract_text_from_pdf(file_path: str) -> str:
     doc = fitz.open(file_path)
     text = ""
     for page in doc:
-        text += page.get_text("text") + "\n\n"
+        text += page.get_text("text") + "\n\n"  # type: ignore
     doc.close()
     return text
 
@@ -90,7 +89,7 @@ def get_embedding(text: str) -> List[float]:
     if not hf_client:
         raise RuntimeError("HuggingFace client not initialized. Set HF_API_KEY.")
     
-    response = hf_client.embeddings.create(
+    response = hf_client.embeddings.create(  # type: ignore
         model=EMBEDDING_MODEL,
         input=text
     )
@@ -145,7 +144,7 @@ def search_youtube(query, max_results=3):
         'default_search': f'ytsearch{max_results}',
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore
             results = ydl.extract_info(query, download=False)
             videos = []
             for entry in results.get('entries', [])[:max_results]:
@@ -172,13 +171,13 @@ async def chat(request: ChatRequest):
         scored = []
 
         for row in result.data:  # type: ignore
-            text_chunk = row.get("text_chunk")
-            emb = row.get("embedding")
-            page = row.get("page_number")
+            text_chunk = row.get("text_chunk") # type: ignore
+            emb = row.get("embedding") # type: ignore
+            page = row.get("page_number") # type: ignore
             
             if isinstance(emb, str):
                 emb = json.loads(emb)
-            score = cosine_similarity(question_emb, emb)
+            score = cosine_similarity(question_emb, emb) # type: ignore
             scored.append({"text": text_chunk, "page": page, "score": score})
 
         top_chunks = sorted(scored, key=lambda x: x["score"], reverse=True)[:3]
