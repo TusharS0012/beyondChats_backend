@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+PyMuPDF
+psycopg2
+pydantic
+typing
+fitz  # PyMuPDF
+os
+numpy
+json
+supabase
+dotenv
+sentence_transformers
+huggingface_hub
