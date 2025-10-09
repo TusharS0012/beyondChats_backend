@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "beyondChats_backend"
+version = "0.1.0"
+description = "Backend for BeyondChats"
+authors = ["Tushar Sharma <you@example.com>"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "0.111.1"
+uvicorn = {extras = ["standard"], version = "0.23.2"}
+python-dotenv = "1.0.1"
+pydantic = "1.10.11"
+numpy = "2.2.0"
+pymupdf = "1.26.0"  # compatible with Python 3.11
+supabase = "2.3.8"  # latest 2.x version compatible
+huggingface-hub = "1.29.1"
+yt-dlp = "2025.10.1"
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
