@@ -2,8 +2,8 @@ services:
   - type: web
     name: beyondChats-backend
     env: python
-    pythonVersion: 3.11   # Stable version compatible with PyMuPDF & psycopg2
-    plan: starter          # Change if you need a higher plan
+    pythonVersion: 3.11  # ✅ Stable for PyMuPDF & Supabase
+    plan: starter
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000} --workers 4 --proxy-headers
     envVars: 
