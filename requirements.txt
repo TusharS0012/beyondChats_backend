@@ -10,3 +10,4 @@ python-dotenv
 sentence-transformers
 huggingface_hub
 typing-extensions
+yt-dlp
